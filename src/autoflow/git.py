@@ -1,6 +1,9 @@
 import subprocess
 
 import click
+from rich.console import Console
+
+console = Console()
 
 
 def run_git_command(command, check=True, capture_output=True, text=True):
@@ -51,13 +54,13 @@ def check_for_unstaged_changes():
 
 def stage_all_changes():
     """Stages all changes (git add .)."""
-    click.echo("Staging all changes...")
-    result = run_git_command(["git", "add", "."])
-    if result and result.returncode == 0:
-        click.echo(click.style("Successfully staged changes.", fg="green"))
-        return True
-    click.echo(click.style("Failed to stage changes.", fg="red"))
-    return False
+    with console.status("[bold green]Staging all changes...", spinner="dots") as status:  # Modified
+        result = run_git_command(["git", "add", "."])
+        if result and result.returncode == 0:
+            status.update("[bold green]Successfully staged changes.[/bold green]")  # Modified
+            return True
+        console.print("[bold red]Failed to stage changes.[/bold red]")  # Modified
+        return False
 
 
 def create_and_checkout_branch(branch_name):
@@ -77,11 +80,11 @@ def git_commit_with_message(message):
     # Split message into subject and body for git commit -m
     lines = message.strip().split('\\n', 1)
     commit_args = ["git", "commit"]
-    commit_args.extend(["-m", lines[0]]) # Subject
+    commit_args.extend(["-m", lines[0]])  # Subject
     if len(lines) > 1 and lines[1].strip():
-        commit_args.extend(["-m", lines[1].strip()]) # Body
+        commit_args.extend(["-m", lines[1].strip()])  # Body
 
-    result = run_git_command(commit_args, capture_output=True) # Capture output to show to user
+    result = run_git_command(commit_args, capture_output=True)  # Capture output to show to user
     if result and result.returncode == 0:
         click.echo(click.style("Successfully committed.", fg="green"))
         if result.stdout:
@@ -90,7 +93,7 @@ def git_commit_with_message(message):
     click.echo(click.style("Failed to commit.", fg="red"))
     if result and result.stderr:
         click.echo(result.stderr)
-    elif result and result.stdout: # Sometimes commit errors go to stdout
+    elif result and result.stdout:  # Sometimes commit errors go to stdout
         click.echo(result.stdout)
     return False
 
@@ -106,13 +109,13 @@ def get_git_diff():
         ":(exclude)package-lock.json",
         ":(exclude)yarn.lock",
         ":(exclude)pnpm-lock.yaml",
-        ":(exclude)composer.lock", # PHP
+        ":(exclude)composer.lock",  # PHP
         ":(exclude)Gemfile.lock"  # Ruby
     ]
 
     command = ["git", "diff", "--staged", "--"] + excluded_patterns
 
-    # If no specific files/patterns are given to diff after '--', 
+    # If no specific files/patterns are given to diff after '--',
     # it implies diffing everything not explicitly excluded in the current directory.
     # To ensure it diffs all staged files respecting exclusions, we can add '.'
     # However, git diff --staged with pathspecs should work correctly.
@@ -121,12 +124,12 @@ def get_git_diff():
     # Actually, `git diff --staged -- pathspec1 pathspec2` is fine.
     # The '--' separates options from pathspecs.
 
-    diff_process = run_git_command(command) # Use the existing helper
+    diff_process = run_git_command(command)  # Use the existing helper
 
     if diff_process and diff_process.stdout:
         return diff_process.stdout
     elif diff_process and not diff_process.stdout:
         # No diff, or only excluded files were staged
-        return "" 
+        return ""
     # Error handling is done in run_git_command, which would return None
     return None

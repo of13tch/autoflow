@@ -1,4 +1,7 @@
 import click
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from autoflow.git import (
     check_for_unstaged_changes,
@@ -11,6 +14,8 @@ from autoflow.git import (
 )
 from autoflow.litellm import generate_commit_message
 
+console = Console()
+
 
 @click.group(invoke_without_command=True)
 @click.pass_context
@@ -19,67 +24,76 @@ def main(ctx):
     if ctx.invoked_subcommand is None:
         ctx.invoke(commit)
 
+
 @main.command()
-@click.pass_context
-def commit(ctx):
+# @click.pass_context # No longer needed as ctx is not used
+def commit():  # Removed ctx
     """Manages branching, staging, and committing changes with an AI-generated message."""
     current_branch_name = get_current_branch()
     if not current_branch_name:
-        click.echo(click.style("Could not determine current branch. Exiting.", fg="red"))
+        console.print("[bold red]Could not determine current branch. Exiting.[/bold red]")
         return
 
     default_branch_name = get_default_branch()
 
+    # Branching logic (if on default branch)
     if default_branch_name and current_branch_name == default_branch_name:
-        if click.confirm(click.style(f"You are on the default branch (\'{current_branch_name}\'). Do you want to create a new branch?", fg="yellow"), default=True):
-            new_branch_name_input = click.prompt(click.style("Enter the name for the new branch", fg="cyan"))
-            if not new_branch_name_input.strip():
-                click.echo(click.style("Branch name cannot be empty. Aborting commit.", fg="red"))
+        if console.input(f"[yellow]You are on the default branch ('{current_branch_name}'). Create a new branch? (y/N): ").strip().lower() == 'y':
+            new_branch_name_input = console.input("[cyan]Enter the name for the new branch: ").strip()
+            if not new_branch_name_input:
+                console.print("[bold red]Branch name cannot be empty. Aborting commit.[/bold red]")
                 return
-            if not create_and_checkout_branch(new_branch_name_input):
-                click.echo(click.style("Failed to create new branch. Aborting commit.", fg="red"))
+            if not create_and_checkout_branch(new_branch_name_input): # This function uses rich for its output
+                # Error message is handled by create_and_checkout_branch
                 return
         else:
-            click.echo(click.style("Proceeding with commit on the default branch.", fg="yellow"))
-
-    if check_for_unstaged_changes():
-        if click.confirm(click.style("You have unstaged changes. Do you want to stage them all?", fg="yellow"), default=True):
-            if not stage_all_changes():
-                click.echo(click.style("Failed to stage changes. Please stage them manually or resolve issues.", fg="red"))
-                if not click.confirm("Proceed without staging all changes?", default=False):
-                    return
-        else:
-            click.echo(click.style("Proceeding without staging new changes. Only previously staged changes will be committed.", fg="yellow"))
-
-    diff_content = get_git_diff()
-    if diff_content is None: # Error in get_git_diff
-        click.echo(click.style("Could not get git diff. Exiting.", fg="red"))
-        return
-    if not diff_content:
-        click.echo("No staged changes found to commit.")
-        if check_for_unstaged_changes():
-            click.echo(click.style("However, there are unstaged changes. Did you mean to stage them?", fg="yellow"))
-        return
-
-    click.echo("Generating commit message...")
-    commit_message = generate_commit_message(diff_content)
+            console.print("[yellow]Proceeding with commit on the default branch.[/yellow]")
     
-    if commit_message == "Error retrieving git diff." or commit_message == "Error generating commit message.":
-         # Error already printed by the generating function
+    # Staging changes
+    # stage_all_changes uses rich for its output
+    if not stage_all_changes(): # This will print its own status/errors
+        # If staging failed, it would have printed a message.
+        # Confirm if user wants to proceed if staging had issues.
+        if console.input("[yellow]Staging may have had issues. Proceed anyway? (y/N): ").strip().lower() != 'y':
+            console.print("[bold red]Aborting commit due to staging issues.[/bold red]")
+            return
+
+    # Diff generation
+    with console.status("[bold green]Generating diff...", spinner="dots"):
+        diff_content = get_git_diff()
+
+    if diff_content is None:
+        console.print("[bold red]Could not get git diff. Exiting.[/bold red]")
+        return
+    if not diff_content.strip():
+        console.print("[yellow]No applicable changes found to commit (lock files might have been excluded or no changes were staged).[/yellow]")
+        if check_for_unstaged_changes(): # Check again in case they only staged lock files initially
+            console.print("[yellow]However, there are unstaged changes. Did you mean to stage them before running autoflow?[/yellow]")
+        return
+
+    # Commit message generation
+    # generate_commit_message uses rich for its status and error output
+    commit_message = generate_commit_message(diff_content)
+
+    # Handle various outcomes from commit message generation
+    if commit_message in ["Error retrieving git diff.", "Error generating commit message.", "Could not generate commit message."]:
+        console.print("[bold red]Aborting commit due to errors in message generation.[/bold red]") # Error already printed by called function
         return
     if commit_message == "No applicable changes to commit (lock files might have been excluded).":
-        click.echo(commit_message)
+        console.print(f"[yellow]{commit_message}[/yellow]")
         return
+    # Fallback message for large diff is handled by generate_commit_message printing a warning.
+    # We still display it for confirmation.
 
-    click.echo("\\nSuggested commit message:")
-    click.echo(click.style("-------------------------", fg="blue"))
-    click.echo(click.style(commit_message, fg="green"))
-    click.echo(click.style("-------------------------", fg="blue"))
+    console.print(Panel(Text(commit_message, style="green"), title="[bold blue]Suggested Commit Message[/bold blue]", expand=False))
 
-    if click.confirm(click.style("Do you want to commit with this message?", fg="yellow"), default=True):
-        if git_commit_with_message(commit_message):
-            click.echo(click.style("Commit successful!", fg="green"))
+    # Final confirmation
+    if console.input("[bold yellow]Commit with this message? (Y/n): ").strip().lower() != 'n':
+        if git_commit_with_message(commit_message): # This function uses rich for its output
+            # Success message handled by git_commit_with_message
+            pass
         else:
-            click.echo(click.style("Commit failed or was aborted.", fg="red"))
+            # Error message handled by git_commit_with_message
+            pass 
     else:
-        click.echo("Commit aborted by user.")
+        console.print("[yellow]Commit aborted by user.[/yellow]")
