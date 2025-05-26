@@ -48,7 +48,7 @@ def commit():  # Removed ctx
                 return
         else:
             console.print("[yellow]Proceeding with commit on the default branch.[/yellow]")
-    
+
     # Staging changes
     # stage_all_changes uses rich for its output
     if not stage_all_changes(): # This will print its own status/errors
@@ -76,6 +76,9 @@ def commit():  # Removed ctx
     commit_message = generate_commit_message(diff_content)
 
     # Handle various outcomes from commit message generation
+    if commit_message is None: # Add this check
+        console.print("[bold red]Failed to generate commit message. Aborting.[/bold red]")
+        return
     if commit_message in ["Error retrieving git diff.", "Error generating commit message.", "Could not generate commit message."]:
         console.print("[bold red]Aborting commit due to errors in message generation.[/bold red]") # Error already printed by called function
         return
@@ -94,6 +97,6 @@ def commit():  # Removed ctx
             pass
         else:
             # Error message handled by git_commit_with_message
-            pass 
+            pass
     else:
         console.print("[yellow]Commit aborted by user.[/yellow]")
