@@ -25,9 +25,9 @@ where = ["src"]
 dev = ["pytest", "pytest-cov", "ruff", "black", "isort", "watchdog"]
 
 [project.scripts]
-autoflow = "autoflow.__main__:main"
-flow = "autoflow.__main__:main"
-af = "autoflow.__main__:main"
+autoflow = "autoflow._cli:main"
+flow = "autoflow._cli:main"
+af = "autoflow._cli:main"
 
 [tool.ruff]
 exclude = [".env", ".venv", "venv", "notebooks"]

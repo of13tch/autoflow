@@ -24,7 +24,7 @@ def generate_commit_message(diff_content):
     # OpenAI's gpt-3.5-turbo has a context window of ~16k tokens.
     # 1 token ~ 4 chars. Let's set a conservative char limit, e.g., 60,000.
     # The prompt itself also consumes tokens.
-    MAX_DIFF_CHARS = 60000
+    MAX_DIFF_CHARS = 60_000
     if len(diff_content) > MAX_DIFF_CHARS:
         console.print(
             f"[yellow]Warning: Diff content is very large ({len(diff_content)} chars, limit is {MAX_DIFF_CHARS} chars). "
@@ -70,7 +70,7 @@ def generate_branch_name(diff_content: str) -> Optional[str]:
 
     # Check for very large diffs (similar to commit message generation)
     # Max length can be adjusted, using a conservative value for now.
-    MAX_DIFF_LENGTH_BRANCH = 8000  # Slightly less than commit to be safe for prompts
+    MAX_DIFF_LENGTH_BRANCH = 60_000  # Slightly less than commit to be safe for prompts
     if len(diff_content) > MAX_DIFF_LENGTH_BRANCH:
         console.print(
             f"[yellow]Diff content is too large for branch name generation ({len(diff_content)} chars, max {MAX_DIFF_LENGTH_BRANCH}). "
