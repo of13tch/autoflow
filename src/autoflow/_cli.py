@@ -12,7 +12,7 @@ from autoflow._git import (
     git_commit_with_message,
     stage_all_changes,
 )
-from autoflow._litellm import generate_commit_message, generate_branch_name
+from autoflow._litellm import generate_branch_name, generate_commit_message
 
 console = Console()
 
