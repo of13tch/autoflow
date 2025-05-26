@@ -65,7 +65,6 @@ def stage_all_changes():
 
 def create_and_checkout_branch(branch_name):
     """Creates and checks out a new branch."""
-    click.echo(f"Creating and checking out new branch: {branch_name}...")
     result = run_git_command(["git", "checkout", "-b", branch_name])
     if result and result.returncode == 0:
         click.echo(click.style(f"Successfully created and checked out branch '{branch_name}'.", fg="green"))
