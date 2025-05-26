@@ -3,7 +3,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from autoflow.git import (
+from autoflow._git import (
     check_for_unstaged_changes,
     create_and_checkout_branch,
     get_current_branch,
@@ -12,7 +12,7 @@ from autoflow.git import (
     git_commit_with_message,
     stage_all_changes,
 )
-from autoflow.litellm import generate_commit_message
+from autoflow._litellm import generate_commit_message, generate_branch_name
 
 console = Console()
 
@@ -35,17 +35,20 @@ def commit():  # Removed ctx
         return
 
     default_branch_name = get_default_branch()
+    diff = get_git_diff(staged=False)
+    if diff is None:
+        console.print("[bold red]Could not get git diff. Exiting.[/bold red]")
+        return
 
     # Branching logic (if on default branch)
     if default_branch_name and current_branch_name == default_branch_name:
-        if console.input(f"[yellow]You are on the default branch ('{current_branch_name}'). Create a new branch? (y/N): ").strip().lower() == 'y':
-            new_branch_name_input = console.input("[cyan]Enter the name for the new branch: ").strip()
-            if not new_branch_name_input:
-                console.print("[bold red]Branch name cannot be empty. Aborting commit.[/bold red]")
-                return
-            if not create_and_checkout_branch(new_branch_name_input): # This function uses rich for its output
-                # Error message is handled by create_and_checkout_branch
-                return
+        branch_name = generate_branch_name(diff)
+        if branch_name is None:
+            console.print("[bold red]Failed to generate branch name. Aborting commit.[/bold red]")
+            return
+
+        if console.input(f"[yellow]You are on the default branch ('{current_branch_name}'). Use generated branch name {branch_name}? (y/N): ").strip().lower() == 'y':
+            create_and_checkout_branch(branch_name)
         else:
             console.print("[yellow]Proceeding with commit on the default branch.[/yellow]")
 

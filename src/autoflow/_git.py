@@ -98,7 +98,7 @@ def git_commit_with_message(message):
     return False
 
 
-def get_git_diff():
+def get_git_diff(staged=True):
     """Returns the output of git diff --staged, excluding common lock files."""
     # Common lock file patterns to exclude.
     # Using pathspecs for exclusion: :(exclude)pattern
@@ -113,7 +113,11 @@ def get_git_diff():
         ":(exclude)Gemfile.lock"  # Ruby
     ]
 
-    command = ["git", "diff", "--staged", "--"] + excluded_patterns
+    # If staged is True, we use `git diff --staged`
+    if staged:
+        command = ["git", "diff", "--staged", "--"] + excluded_patterns
+    else:
+        command = ["git", "diff", "--"] + excluded_patterns
 
     # If no specific files/patterns are given to diff after '--',
     # it implies diffing everything not explicitly excluded in the current directory.
