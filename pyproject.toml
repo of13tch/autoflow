@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoflow"
+version = "0.1.0"
+description = "A CLI to help write good commit messages whilst preserving the flow"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click==8.2.1",
+    "litellm==1.71.1",
+    "PyGithub==2.6.1",
+    "rich"  # Added rich
+]
+
+[tool.setuptools_scm]
+fallback_version = "0.1.0"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "black", "isort", "watchdog"]
+
+[project.scripts]
+autoflow = "autoflow.__main__:main"
+flow = "autoflow.__main__:main"
+af = "autoflow.__main__:main"
+
+[tool.ruff]
+exclude = [".env", ".venv", "venv", "notebooks"]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = ["E501"]
+select = ["E", "F", "I", "W"]
+fixable = ["I"]
+
+[tool.coverage.paths]
+source = ["src"]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120
+src_paths = ["src", "tests"]
