@@ -1,6 +1,8 @@
 import os
+from typing import Optional
 
 import litellm
+from litellm.exceptions import ContextWindowExceededError  # type: ignore
 from rich.console import Console
 
 console = Console()
@@ -53,3 +55,76 @@ def generate_commit_message(diff_content):
     except Exception as e:
         console.print(f"[bold red]Error generating commit message with litellm: {e}[/bold red]")
         return "Error generating commit message."
+
+
+def generate_branch_name(diff_content: str) -> Optional[str]:
+    """
+    Generates a branch name suggestion based on the git diff content using litellm.
+    """
+    model = os.getenv("AUTOFLOW_LITELLM_MODEL", "gpt-3.5-turbo")
+    verbose = os.getenv("AUTOFLOW_LITELLM_VERBOSE", "False").lower() == "true"
+
+    if not diff_content.strip():
+        console.print("[yellow]No diff content provided to generate branch name.[/yellow]")
+        return None
+
+    # Check for very large diffs (similar to commit message generation)
+    # Max length can be adjusted, using a conservative value for now.
+    MAX_DIFF_LENGTH_BRANCH = 8000  # Slightly less than commit to be safe for prompts
+    if len(diff_content) > MAX_DIFF_LENGTH_BRANCH:
+        console.print(
+            f"[yellow]Diff content is too large for branch name generation ({len(diff_content)} chars, max {MAX_DIFF_LENGTH_BRANCH}). "
+            "Skipping automatic suggestion.[/yellow]"
+        )
+        return None
+
+    system_prompt = """You are an expert at creating Git branch names. Based on the following git diff, suggest a concise, descriptive branch name.
+The branch name should:
+- Be in kebab-case (e.g., feature/user-authentication or fix/incorrect-calculation).
+- Often start with a type like feat/, fix/, chore/, docs/, refactor/, test/, style/ if applicable.
+- Be lowercase.
+- Not contain spaces or special characters other than hyphens and slashes.
+- Be relatively short but informative.
+- Consist of a single line.
+Output only the branch name itself, without any other text, explanation, or quotation marks."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Generate a branch name for the following diff:\n{diff_content}"},
+    ]
+
+    with console.status("[bold green]Generating branch name suggestion with LLM...", spinner="dots"):
+        try:
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                temperature=0.5, # Slightly lower temp for more predictable branch names
+                max_tokens=50,   # Branch names should be short
+            )
+            if verbose:
+                console.print(f"LLM Raw Response for branch name: {response}")
+
+            branch_name_suggestion = response.choices[0].message.content.strip()
+            # Clean up potential markdown or quotes
+            branch_name_suggestion = branch_name_suggestion.replace("`", "").replace("'", "").replace('"', "").strip()
+
+            # Further ensure it's a single, valid-like segment
+            if ' ' in branch_name_suggestion or '\\n' in branch_name_suggestion or not branch_name_suggestion:
+                console.print(f"[yellow]LLM generated an invalid branch name format: '{branch_name_suggestion}'. Skipping.[/yellow]")
+                return None
+
+
+            return branch_name_suggestion if branch_name_suggestion else None
+
+        except ContextWindowExceededError:
+            console.print(
+                "[bold red]Context window exceeded while generating branch name. "
+                "The diff is too large for the selected model.[/bold red]"
+            )
+            return None
+        except Exception as e:
+            console.print(f"[bold red]Error generating branch name with litellm: {e}[/bold red]")
+            if verbose:
+                import traceback
+                console.print(traceback.format_exc())
+            return None
