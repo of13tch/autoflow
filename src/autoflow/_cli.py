@@ -87,6 +87,7 @@ def commit():
 
 @main.command()
 def pr():
+    """Creates a pull request with an AI-generated description based on the latest commit."""
     default_branch_name, current_branch_name, commit_message, diff_content = commit()
 
     if current_branch_name == default_branch_name:
