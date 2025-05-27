@@ -8,6 +8,8 @@ from github import Github
 from github.GithubException import GithubException
 from rich.console import Console
 
+from autoflow._exceptions import NoGithubRepoInfo, NoGithubTokenError, NoGitRepoDetected
+
 console = Console()
 
 
@@ -80,7 +82,6 @@ def create_and_checkout_branch(branch_name):
 
 def git_commit_with_message(message):
     """Commits staged changes with the given message."""
-    click.echo("Committing with message...")
     # Split message into subject and body for git commit -m
     lines = message.strip().split('\\n', 1)
     commit_args = ["git", "commit"]
@@ -90,11 +91,9 @@ def git_commit_with_message(message):
 
     result = run_git_command(commit_args, capture_output=True)  # Capture output to show to user
     if result and result.returncode == 0:
-        click.echo(click.style("Successfully committed.", fg="green"))
         if result.stdout:
             click.echo(result.stdout)
         return True
-    click.echo(click.style("Failed to commit.", fg="red"))
     if result and result.stderr:
         click.echo(result.stderr)
     elif result and result.stdout:  # Sometimes commit errors go to stdout
@@ -218,7 +217,7 @@ def get_git_auth_token():
         return None
 
 
-def create_pull_request(title: str, body: str, base_branch: Optional[str] = None) -> Optional[str]:
+def create_pull_request(title: str, body: str, base_branch: str) -> Optional[str]:
     """
     Create a pull request on GitHub.
 
@@ -233,47 +232,26 @@ def create_pull_request(title: str, body: str, base_branch: Optional[str] = None
     # Get GitHub token from environment
     github_token = get_git_auth_token()
     if not github_token:
-        console.print(
-            "[bold red]GitHub token not found.[/bold red] Please set the GITHUB_TOKEN environment variable."
-        )
-        return None
+        raise NoGithubTokenError
 
     # Get current branch
     head_branch = get_current_branch()
     if not head_branch:
-        console.print("[bold red]Could not determine current branch.[/bold red]")
-        return None
+        raise NoGitRepoDetected
 
     # Get repository info
     owner, repo_name = get_remote_repo_info()
     if not owner or not repo_name:
-        console.print("[bold red]Could not determine GitHub repository information.[/bold red]")
-        return None
-
-    # Get the default branch if base_branch is not specified
-    if not base_branch:
-        base_branch = get_default_branch()
-        if not base_branch:
-            console.print("[bold red]Could not determine default branch.[/bold red]")
-            return None
+        raise NoGithubRepoInfo
 
     # Initialize GitHub client
     g = Github(github_token)
 
-    try:
-        with console.status("[bold green]Creating pull request...", spinner="dots"):
-            repo = g.get_repo(f"{owner}/{repo_name}")
-            pr = repo.create_pull(
-                title=title,
-                body=body,
-                head=head_branch,
-                base=base_branch
-            )
-            console.print(f"[bold green]Successfully created PR: {pr.html_url}[/bold green]")
-            return pr.html_url
-    except GithubException as e:
-        console.print(f"[bold red]Failed to create PR: {e.data.get('message', str(e))}[/bold red]")
-        return None
-    except Exception as e:
-        console.print(f"[bold red]Error creating PR: {str(e)}[/bold red]")
-        return None
+    repo = g.get_repo(f"{owner}/{repo_name}")
+    pr = repo.create_pull(
+        title=title,
+        body=body,
+        head=head_branch,
+        base=base_branch
+    )
+    return pr.html_url

@@ -101,7 +101,6 @@ def pr(ctx):
             pr_description = generate_pr_description(diff_content, commit_message)
         except Exception as e:
             console.print(f"[bold red]Error generating PR description: {e}[/bold red]")
-            console.print("[yellow]Proceeding with just the commit message as the PR description.[/yellow]")
             pr_description = commit_message
 
     # Show PR description and allow editing
@@ -121,4 +120,3 @@ def pr(ctx):
         console.print(f"[bold green]Pull request created successfully: {pr_url}[/bold green]")
     else:
         console.print("[bold red]Failed to create pull request.[/bold red]")
-        console.print("[yellow]You can manually create the PR on GitHub with the generated description.[/yellow]")
