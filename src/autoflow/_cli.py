@@ -86,9 +86,10 @@ def commit():
 
 
 @main.command()
-def pr():
+@click.pass_context
+def pr(ctx):
     """Creates a pull request with an AI-generated description based on the latest commit."""
-    default_branch_name, current_branch_name, commit_message, diff_content = commit()
+    default_branch_name, current_branch_name, commit_message, diff_content = ctx.invoke(commit)
 
     if current_branch_name == default_branch_name:
         console.print("[bold red]You are on the default branch. Please create a new branch before creating a PR.[/bold red]")
