@@ -83,3 +83,61 @@ Output only the branch name itself, without any other text, explanation, or quot
         raise InvalidBranchName(f"Invalid branch name suggestion: {branch_name_suggestion}")
 
     return branch_name_suggestion
+
+
+def generate_pr_description(diff_content: str, commit_message: str = "") -> str:
+    """
+    Generates a PR description based on the git diff content and commit message.
+
+    Args:
+        diff_content: Git diff content showing the changes
+        commit_message: Optional commit message to include in the context
+
+    Returns:
+        A formatted PR description with summary, changes, and testing instructions
+    """
+    if not diff_content.strip():
+        raise NoDiffContent
+
+    if len(diff_content) > MAX_DIFF_CHARS:
+        raise ContextWindowExceededError
+
+    # Build the prompt with context including the commit message if available
+    context = f"Commit message: {commit_message}\n\n" if commit_message else ""
+    context += f"Code changes:\n{diff_content}"
+
+    system_prompt = """You are an expert at creating detailed, well-structured Pull Request descriptions.
+Based on the provided git diff and commit message (if given), create a comprehensive PR description with the following sections:
+
+## Summary
+A brief summary of what this PR accomplishes in 1-3 sentences.
+
+## Changes
+A bullet-point list of key changes made by this PR. Focus on functionality, not file names.
+
+## Testing Instructions
+Steps required to test these changes.
+
+Keep the description professional, concise, and focused on what's important for reviewers to know.
+"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": context},
+    ]
+
+    try:
+        response = litellm.completion(
+            model=model,
+            messages=messages,
+            temperature=0.7,
+        )
+
+        if response.choices and response.choices[0].message and response.choices[0].message.content:
+            return response.choices[0].message.content.strip()
+        else:
+            raise GenericLLMError("Failed to generate PR description")
+    except Exception as e:
+        if isinstance(e, ContextWindowExceededError):
+            raise e
+        raise GenericLLMError(f"Error generating PR description: {str(e)}")

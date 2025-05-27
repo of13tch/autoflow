@@ -1,6 +1,11 @@
+import os
+import re
 import subprocess
+from typing import Optional, Tuple
 
 import click
+from github import Github
+from github.GithubException import GithubException
 from rich.console import Console
 
 console = Console()
@@ -136,3 +141,139 @@ def get_git_diff(staged=True):
         return ""
     # Error handling is done in run_git_command, which would return None
     return None
+
+
+def get_remote_repo_info() -> Tuple[Optional[str], Optional[str]]:
+    """
+    Parse the GitHub remote URL to extract owner and repo name.
+    Returns a tuple of (owner, repo_name) or (None, None) if not found.
+    """
+    # Get the GitHub remote URL
+    result = run_git_command(["git", "remote", "get-url", "origin"])
+    if not result or not result.stdout:
+        console.print("[bold red]Failed to get remote URL.[/bold red]")
+        return None, None
+
+    remote_url = result.stdout.strip()
+
+    # Parse the GitHub URL format: https://github.com/owner/repo.git or git@github.com:owner/repo.git
+    https_pattern = r"https://github\.com/([^/]+)/([^/.]+)(?:\.git)?"
+    ssh_pattern = r"git@github\.com:([^/]+)/([^/.]+)(?:\.git)?"
+
+    https_match = re.match(https_pattern, remote_url)
+    if https_match:
+        return https_match.group(1), https_match.group(2)
+
+    ssh_match = re.match(ssh_pattern, remote_url)
+    if ssh_match:
+        return ssh_match.group(1), ssh_match.group(2)
+
+    console.print(f"[bold yellow]Could not parse GitHub repo info from {remote_url}[/bold yellow]")
+    return None, None
+
+
+def push_current_branch() -> bool:
+    """
+    Push the current branch to remote.
+    Returns True if successful, False otherwise.
+    """
+    current_branch = get_current_branch()
+    if not current_branch:
+        console.print("[bold red]Could not determine current branch.[/bold red]")
+        return False
+
+    with console.status(f"[bold green]Pushing branch {current_branch} to remote...", spinner="dots"):
+        result = run_git_command(["git", "push", "--set-upstream", "origin", current_branch])
+
+        if result and result.returncode == 0:
+            console.print(f"[bold green]Successfully pushed branch {current_branch} to remote.[/bold green]")
+            return True
+
+        console.print("[bold red]Failed to push branch to remote.[/bold red]")
+        if result and result.stderr:
+            console.print(f"[red]{result.stderr}[/red]")
+        return False
+
+
+def get_git_auth_token():
+    github_token = os.getenv("GITHUB_TOKEN")
+    if github_token:
+        return github_token
+    try:
+        # Prepare the input for git credential fill
+        input_data = "protocol=https\nhost=github.com\n\n"
+
+        # Run the git credential fill command
+        result = subprocess.run(["git", "credential", "fill"], input=input_data, capture_output=True, text=True)
+
+        # Check if the command was successful
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            for line in output.splitlines():
+                if line.startswith("password="):
+                    return line.split("=", 1)[1]
+        return None
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+
+def create_pull_request(title: str, body: str, base_branch: Optional[str] = None) -> Optional[str]:
+    """
+    Create a pull request on GitHub.
+
+    Args:
+        title: Title for the PR
+        body: Description for the PR
+        base_branch: Target branch for the PR (default: repository's default branch)
+
+    Returns:
+        URL of the created PR or None if failed
+    """
+    # Get GitHub token from environment
+    github_token = get_git_auth_token()
+    if not github_token:
+        console.print(
+            "[bold red]GitHub token not found.[/bold red] Please set the GITHUB_TOKEN environment variable."
+        )
+        return None
+
+    # Get current branch
+    head_branch = get_current_branch()
+    if not head_branch:
+        console.print("[bold red]Could not determine current branch.[/bold red]")
+        return None
+
+    # Get repository info
+    owner, repo_name = get_remote_repo_info()
+    if not owner or not repo_name:
+        console.print("[bold red]Could not determine GitHub repository information.[/bold red]")
+        return None
+
+    # Get the default branch if base_branch is not specified
+    if not base_branch:
+        base_branch = get_default_branch()
+        if not base_branch:
+            console.print("[bold red]Could not determine default branch.[/bold red]")
+            return None
+
+    # Initialize GitHub client
+    g = Github(github_token)
+
+    try:
+        with console.status("[bold green]Creating pull request...", spinner="dots"):
+            repo = g.get_repo(f"{owner}/{repo_name}")
+            pr = repo.create_pull(
+                title=title,
+                body=body,
+                head=head_branch,
+                base=base_branch
+            )
+            console.print(f"[bold green]Successfully created PR: {pr.html_url}[/bold green]")
+            return pr.html_url
+    except GithubException as e:
+        console.print(f"[bold red]Failed to create PR: {e.data.get('message', str(e))}[/bold red]")
+        return None
+    except Exception as e:
+        console.print(f"[bold red]Error creating PR: {str(e)}[/bold red]")
+        return None

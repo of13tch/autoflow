@@ -5,13 +5,15 @@ from rich.text import Text
 
 from autoflow._git import (
     create_and_checkout_branch,
+    create_pull_request,
     get_current_branch,
     get_default_branch,
     get_git_diff,
     git_commit_with_message,
+    push_current_branch,
     stage_all_changes,
 )
-from autoflow._litellm import generate_branch_name, generate_commit_message
+from autoflow._litellm import generate_branch_name, generate_commit_message, generate_pr_description
 
 console = Console()
 
@@ -25,8 +27,7 @@ def main(ctx):
 
 
 @main.command()
-# @click.pass_context # No longer needed as ctx is not used
-def commit():  # Removed ctx
+def commit():
     """Manages branching, staging, and committing changes with an AI-generated message."""
     current_branch_name = get_current_branch()
     if not current_branch_name:
@@ -72,7 +73,50 @@ def commit():  # Removed ctx
     console.print(Panel(Text(commit_message, style="green"), title="[bold blue]Suggested Commit Message[/bold blue]", expand=False))
 
     # Final confirmation
-    if console.input("Commit with this message? (Y/n): ").strip().lower() != 'n':
+    if console.input("Commit & Push with this message? (Y/n): ").strip().lower() != 'n':
         git_commit_with_message(commit_message)
     else:
         console.print("[red]Commit aborted by user.[/red]")
+
+    if not push_current_branch():
+        console.print("[bold red]Failed to push branch to remote. Aborting PR creation.[/bold red]")
+        return
+
+    return default_branch_name, current_branch_name, commit_message, diff_content
+
+
+@main.command()
+def pr():
+    default_branch_name, current_branch_name, commit_message, diff_content = commit()
+
+    if current_branch_name == default_branch_name:
+        console.print("[bold red]You are on the default branch. Please create a new branch before creating a PR.[/bold red]")
+        return
+
+    # Generate PR description using the commit message as context
+    with console.status("Generating PR description...", spinner="dots"):
+        try:
+            pr_description = generate_pr_description(diff_content, commit_message)
+        except Exception as e:
+            console.print(f"[bold red]Error generating PR description: {e}[/bold red]")
+            console.print("[yellow]Proceeding with just the commit message as the PR description.[/yellow]")
+            pr_description = commit_message
+
+    # Show PR description and allow editing
+    console.print(Panel(Text(pr_description, style="green"), title="[bold blue]Suggested PR Description[/bold blue]", expand=False))
+
+    if console.input("Use this PR description? (Y/n): ").strip().lower() == 'n':
+        console.print("[yellow]You can manually create the PR on GitHub.[/yellow]")
+        return
+
+    # Extract the title (first line) for the PR title
+    pr_title = commit_message.split('\n')[0]
+
+    # Create the PR
+    pr_url = create_pull_request(pr_title, pr_description, base_branch=default_branch_name)
+
+    if pr_url:
+        console.print(f"[bold green]Pull request created successfully: {pr_url}[/bold green]")
+    else:
+        console.print("[bold red]Failed to create pull request.[/bold red]")
+        console.print("[yellow]You can manually create the PR on GitHub with the generated description.[/yellow]")
