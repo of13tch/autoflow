@@ -4,7 +4,6 @@ from rich.panel import Panel
 from rich.text import Text
 
 from autoflow._git import (
-    check_for_unstaged_changes,
     create_and_checkout_branch,
     get_current_branch,
     get_default_branch,
